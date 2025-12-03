@@ -4,10 +4,14 @@
   "description": "Simple SFTP client for macOS (Electron)",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "build": "electron-builder"
   },
   "dependencies": {
-    "electron": "^34.0.0",        
-    "ssh2-sftp-client": "^11.0.0" 
+    "ssh2-sftp-client": "^11.0.0"
+  },
+  "devDependencies": {
+    "electron": "^34.0.0",
+    "electron-builder": "^26.0.12"
   }
 }
