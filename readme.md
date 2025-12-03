@@ -82,3 +82,10 @@ If you encounter any issues or have questions, please open an issue on GitHub.
 ## Disclaimer
 
 This software is provided as-is. Use at your own risk.
+
+
+##GUI SHOWCASE
+<img width="1104" height="751" alt="image" src="https://github.com/user-attachments/assets/6ef7ebea-f119-4afc-9fe6-c32087b56289" />
+<img width="1098" height="745" alt="image" src="https://github.com/user-attachments/assets/46222685-5ab2-4582-9ba3-38a5c40b8ccf" />
+<img width="1102" height="753" alt="image" src="https://github.com/user-attachments/assets/5115fcc8-07cf-4a71-93eb-d67e62dd4693" />
+
