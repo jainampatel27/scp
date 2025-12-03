@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>SecureConnect - File Browser</title>
+    <link rel="stylesheet" href="../styles/global.css" />
+    <link rel="stylesheet" href="../styles/browser.css" />
+  </head>
+  <body>
+    <!-- Top Toolbar -->
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <button class="toolbar-btn" id="disconnectBtn" title="Disconnect">
+          <svg viewBox="0 0 24 24">
+            <path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5c-1.11 0-2 .9-2 2v4h2V5h14v14H5v-4H3v4c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>
+          </svg>
+        </button>
+        <div class="connection-info">
+          <span class="connection-dot"></span>
+          <span id="connectionLabel">Connected</span>
+        </div>
+      </div>
+      
+      <div class="toolbar-center">
+        <button class="nav-btn" id="backBtn" title="Go Back" disabled>
+          <svg viewBox="0 0 24 24">
+            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+          </svg>
+        </button>
+        <button class="nav-btn" id="forwardBtn" title="Go Forward" disabled>
+          <svg viewBox="0 0 24 24">
+            <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/>
+          </svg>
+        </button>
+        <button class="nav-btn" id="upBtn" title="Go Up">
+          <svg viewBox="0 0 24 24">
+            <path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z"/>
+          </svg>
+        </button>
+        <button class="nav-btn" id="refreshBtn" title="Refresh">
+          <svg viewBox="0 0 24 24">
+            <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+          </svg>
+        </button>
+        <div class="path-bar">
+          <svg class="path-icon" viewBox="0 0 24 24">
+            <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+          </svg>
+          <input type="text" id="pathInput" class="path-input" value="/" />
+          <button class="path-go-btn" id="goBtn">Go</button>
+        </div>
+      </div>
+      
+      <div class="toolbar-right">
+        <button class="toolbar-btn" id="newFolderBtn" title="New Folder">
+          <svg viewBox="0 0 24 24">
+            <path d="M20 6h-8l-2-2H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-1 8h-3v3h-2v-3h-3v-2h3V9h2v3h3v2z"/>
+          </svg>
+        </button>
+        <button class="toolbar-btn" id="uploadBtn" title="Upload Files">
+          <svg viewBox="0 0 24 24">
+            <path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/>
+          </svg>
+        </button>
+        <button class="toolbar-btn" id="downloadBtn" title="Download" disabled>
+          <svg viewBox="0 0 24 24">
+            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+          </svg>
+        </button>
+        <button class="toolbar-btn danger" id="deleteBtn" title="Delete" disabled>
+          <svg viewBox="0 0 24 24">
+            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <!-- File List -->
+      <div class="file-panel" id="filePanel">
+        <div class="panel-header">
+          <span class="panel-title">Remote Files</span>
+          <span class="panel-path" id="currentPath">/</span>
+        </div>
+        
+        <div class="file-list-header">
+          <div class="col-name">Name</div>
+          <div class="col-size">Size</div>
+          <div class="col-modified">Modified</div>
+          <div class="col-permissions">Permissions</div>
+        </div>
+        
+        <div class="file-list" id="fileList">
+          <!-- Files will be rendered here -->
+          <div class="loading-state" id="loadingState">
+            <div class="spinner"></div>
+            <span>Loading files...</span>
+          </div>
+        </div>
+
+        <!-- Drag & Drop Overlay -->
+        <div class="drop-overlay" id="dropOverlay">
+          <div class="drop-overlay-content">
+            <svg viewBox="0 0 24 24">
+              <path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/>
+            </svg>
+            <span>Drop files here to upload</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Transfer Panel -->
+    <div class="transfer-panel" id="transferPanel">
+      <div class="transfer-header">
+        <span class="transfer-title">Transfers</span>
+        <button class="transfer-toggle" id="transferToggle">
+          <svg viewBox="0 0 24 24">
+            <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="transfer-list" id="transferList">
+        <!-- Transfer items will be rendered here -->
+        <div class="transfer-empty">No active transfers</div>
+      </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <div class="status-left">
+        <span id="itemCount">0 items</span>
+        <span class="status-separator">|</span>
+        <span id="selectedCount">0 selected</span>
+      </div>
+      <div class="status-right">
+        <span id="serverInfo">-</span>
+      </div>
+    </div>
+
+    <!-- Hidden file input for upload -->
+    <input type="file" id="fileInput" multiple style="display: none;" />
+
+    <!-- New Item Modal -->
+    <div class="modal-overlay" id="newItemModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="modalTitle">Create New</h3>
+          <button class="modal-close" id="modalClose">
+            <svg viewBox="0 0 24 24">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="type-selector" id="typeSelector">
+            <button class="type-option" data-type="folder">
+              <svg viewBox="0 0 24 24">
+                <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+              </svg>
+              <span>Folder</span>
+            </button>
+            <button class="type-option" data-type="file">
+              <svg viewBox="0 0 24 24">
+                <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+              </svg>
+              <span>File</span>
+            </button>
+          </div>
+          <div class="name-input-group" id="nameInputGroup" style="display: none;">
+            <label id="nameLabel">Name</label>
+            <input type="text" class="name-input" id="newItemName" placeholder="Enter name..." />
+            <div class="extension-hint" id="extensionHint"></div>
+          </div>
+        </div>
+        <div class="modal-footer" id="modalFooter" style="display: none;">
+          <button class="btn-secondary" id="backToTypeBtn">Back</button>
+          <button class="btn-primary" id="createItemBtn">Create</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal-overlay" id="deleteModal">
+      <div class="modal modal-small">
+        <div class="modal-header">
+          <h3>Confirm Delete</h3>
+          <button class="modal-close" id="deleteModalClose">
+            <svg viewBox="0 0 24 24">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="delete-message" id="deleteMessage">Are you sure you want to delete the selected items?</p>
+          <div class="delete-items-list" id="deleteItemsList"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" id="cancelDeleteBtn">Cancel</button>
+          <button class="btn-danger" id="confirmDeleteBtn">Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="../renderer/browser.js"></script>
+  </body>
+</html>

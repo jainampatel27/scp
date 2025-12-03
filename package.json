@@ -1,0 +1,13 @@
+{
+  "name": "mac-sftp-client",
+  "version": "1.0.0",
+  "description": "Simple SFTP client for macOS (Electron)",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "electron": "^34.0.0",        
+    "ssh2-sftp-client": "^11.0.0" 
+  }
+}

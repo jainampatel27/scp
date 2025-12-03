@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>SecureConnect - Connect</title>
+    <link rel="stylesheet" href="../styles/global.css" />
+    <link rel="stylesheet" href="../styles/connect.css" />
+  </head>
+  <body>
+    <div class="titlebar">
+      <span class="titlebar-title">SecureConnect</span>
+    </div>
+
+    <div class="main-container">
+      <div class="logo-section">
+        <div class="logo">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 6c1.4 0 2.8 1.1 2.8 2.5V11c.6 0 1.2.6 1.2 1.3v3.5c0 .6-.6 1.2-1.3 1.2H9.2c-.6 0-1.2-.6-1.2-1.3v-3.5c0-.6.6-1.2 1.3-1.2V9.5C9.2 8.1 10.6 7 12 7zm0 1.2c-.8 0-1.5.5-1.5 1.3V11h3V9.5c0-.8-.7-1.3-1.5-1.3z"/>
+          </svg>
+        </div>
+        <h1 class="app-title">SecureConnect</h1>
+        <p class="app-subtitle">Modern SFTP Client for macOS</p>
+      </div>
+
+      <div class="connection-card">
+        <div class="card-header">
+          <div class="step-indicator">
+            <div class="step active" id="step1">1</div>
+            <div class="step-line" id="stepLine"></div>
+            <div class="step inactive" id="step2">2</div>
+          </div>
+        </div>
+
+        <!-- Step 1: Server Connection -->
+        <div class="form-section" id="serverSection">
+          <h2 class="section-title">Connect to Server</h2>
+          <p class="section-description">Enter the server address to check connectivity before authenticating.</p>
+
+          <div id="serverStatus" class="status-message hidden"></div>
+
+          <div class="input-row">
+            <div class="input-group">
+              <label class="input-label">Host / IP Address</label>
+              <div class="input-wrapper">
+                <input type="text" id="host" placeholder="example.com or 192.168.1.1" />
+                <svg class="input-icon" viewBox="0 0 24 24">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                </svg>
+              </div>
+            </div>
+            <div class="input-group small">
+              <label class="input-label">Port</label>
+              <div class="input-wrapper">
+                <input type="text" id="port" value="22" placeholder="22" style="padding-left: 14px;" />
+              </div>
+            </div>
+          </div>
+
+          <button class="btn btn-primary" id="checkConnectivityBtn">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            </svg>
+            Check Connectivity
+          </button>
+
+          <div class="saved-sessions">
+            <div class="saved-sessions-title">Recent Connections</div>
+            <div class="session-list" id="sessionList">
+              <div class="empty-sessions">No saved sessions yet</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 2: Authentication -->
+        <div class="form-section hidden" id="authSection">
+          <h2 class="section-title">Authenticate</h2>
+          <p class="section-description">Server is reachable. Enter your credentials to connect.</p>
+
+          <div class="connection-badge">
+            <svg class="connection-badge-icon" viewBox="0 0 24 24">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            </svg>
+            <span class="connection-badge-text">Connected to <span class="connection-badge-host" id="connectedHost"></span></span>
+            <span class="connection-badge-change" id="changeServer">Change</span>
+          </div>
+
+          <div id="authStatus" class="status-message hidden"></div>
+
+          <div class="input-group">
+            <label class="input-label">Username</label>
+            <div class="input-wrapper">
+              <input type="text" id="username" placeholder="Enter username" />
+              <svg class="input-icon" viewBox="0 0 24 24">
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+              </svg>
+            </div>
+          </div>
+
+          <div class="input-group">
+            <label class="input-label">Password</label>
+            <div class="input-wrapper">
+              <input type="password" id="password" placeholder="Enter password" />
+              <svg class="input-icon" viewBox="0 0 24 24">
+                <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+              </svg>
+            </div>
+          </div>
+
+          <div class="btn-group">
+            <button class="btn btn-secondary" id="backBtn">
+              <svg viewBox="0 0 24 24">
+                <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+              </svg>
+              Back
+            </button>
+            <button class="btn btn-primary" id="connectBtn">
+              <svg viewBox="0 0 24 24">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+              </svg>
+              Connect
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="../renderer/connect.js"></script>
+  </body>
+</html>
