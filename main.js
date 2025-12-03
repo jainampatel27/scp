@@ -10,6 +10,11 @@ let connectionInfo = null;
 let activeTransfers = new Map();
 
 function createWindow() {
+  // Determine icon path based on platform
+  const iconPath = process.platform === 'darwin' 
+    ? path.join(__dirname, 'logo', 'logo.icns')
+    : path.join(__dirname, 'logo', 'logo.png');
+  
   mainWindow = new BrowserWindow({
     width: 1100,
     height: 750,
@@ -18,6 +23,7 @@ function createWindow() {
     titleBarStyle: "hiddenInset",
     vibrancy: "dark",
     backgroundColor: "#1a1a2e",
+    icon: iconPath, // Use the correct icon for platform
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       nodeIntegration: false,
@@ -322,7 +328,23 @@ ipcMain.handle("delete-items", async (event, paths) => {
   return results;
 });
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  // On macOS set the dock icon from the project's logo (development/default)
+  // BrowserWindow's `icon` option is not used by macOS for the titlebar/dock icon.
+  if (process.platform === 'darwin') {
+    try {
+      const { nativeImage } = require('electron');
+      const iconPath = path.join(__dirname, 'logo','logo.icns');
+      if (fs.existsSync(iconPath)) {
+        const icon = nativeImage.createFromPath(iconPath);
+        app.dock.setIcon(icon);
+      }
+    } catch (e) {
+      // Ignore any errors setting the dock icon during development
+    }
+  }
+  createWindow();
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {

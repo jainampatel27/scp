@@ -26,9 +26,17 @@
   box-shadow: 0 10px 40px rgba(233, 69, 96, 0.3);
 }
 
+.logo img,
 .logo svg {
   width: 48px;
   height: 48px;
+}
+
+.logo img {
+  object-fit: cover;
+  border-radius: 6px;
+}
+.logo svg {
   fill: white;
 }
 
