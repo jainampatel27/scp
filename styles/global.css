@@ -7,18 +7,24 @@
 :root {
   --bg-primary: #1a1a2e;
   --bg-secondary: #16213e;
+  --bg-tertiary: #0f1729;
   --bg-card: #0f3460;
   --bg-hover: rgba(255, 255, 255, 0.08);
   --accent: #e94560;
+  --accent-color: #e94560;
   --accent-hover: #ff6b6b;
   --text-primary: #ffffff;
   --text-secondary: #a0a0b0;
+  --text-muted: #6b7280;
   --success: #4ade80;
+  --success-color: #4ade80;
   --warning: #fbbf24;
   --error: #f87171;
+  --danger-color: #f87171;
   --border-color: rgba(255, 255, 255, 0.1);
   --border-radius: 12px;
   --border-radius-sm: 8px;
+  --font-mono: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
 }
 
 body {

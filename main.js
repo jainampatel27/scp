@@ -8,6 +8,7 @@ let mainWindow;
 let sftp = new Client();
 let connectionInfo = null;
 let activeTransfers = new Map();
+let editorWindows = new Map(); // Track editor windows
 
 function createWindow() {
   // Determine icon path based on platform
@@ -326,6 +327,78 @@ ipcMain.handle("delete-items", async (event, paths) => {
   }
   
   return results;
+});
+
+// Read file content
+ipcMain.handle("read-file", async (event, filePath) => {
+  if (!sftp || !connectionInfo) {
+    throw new Error("Not connected to server");
+  }
+  try {
+    const buffer = await sftp.get(filePath);
+    return buffer.toString('utf8');
+  } catch (err) {
+    throw new Error(err.message);
+  }
+});
+
+// Write file content
+ipcMain.handle("write-file", async (event, filePath, content) => {
+  if (!sftp || !connectionInfo) {
+    throw new Error("Not connected to server");
+  }
+  try {
+    await sftp.put(Buffer.from(content, 'utf8'), filePath);
+    return { ok: true };
+  } catch (err) {
+    throw new Error(err.message);
+  }
+});
+
+// Open file in new editor window
+ipcMain.on("open-file-in-editor", (event, fileInfo) => {
+  createEditorWindow(fileInfo);
+});
+
+// Create editor window
+function createEditorWindow(fileInfo) {
+  const iconPath = process.platform === 'darwin' 
+    ? path.join(__dirname, 'logo', 'logo.icns')
+    : path.join(__dirname, 'logo', 'logo.png');
+  
+  const editorWindow = new BrowserWindow({
+    width: 900,
+    height: 700,
+    minWidth: 600,
+    minHeight: 400,
+    titleBarStyle: "hiddenInset",
+    vibrancy: "dark",
+    backgroundColor: "#1a1a2e",
+    icon: iconPath,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  });
+
+  // Store file info for this window
+  const windowId = editorWindow.id;
+  editorWindows.set(windowId, fileInfo);
+
+  editorWindow.loadFile("pages/editor.html");
+
+  editorWindow.on("closed", () => {
+    editorWindows.delete(windowId);
+  });
+
+  return editorWindow;
+}
+
+// Get editor file info for the requesting window
+ipcMain.handle("get-editor-file-info", (event) => {
+  const windowId = BrowserWindow.fromWebContents(event.sender).id;
+  return editorWindows.get(windowId) || null;
 });
 
 app.whenReady().then(() => {

@@ -145,13 +145,21 @@ function attachFileHandlers() {
       updateActionButtons();
     });
     
-    // Double click to open folder
+    // Double click to open folder or file
     item.addEventListener("dblclick", () => {
       const name = item.dataset.name;
       const type = item.dataset.type;
       
       if (type === "d") {
+        // It's a folder - navigate into it
         navigateTo(currentPath === "/" ? `/${name}` : `${currentPath}/${name}`);
+      } else {
+        // It's a file - open in new editor window
+        const filePath = currentPath === "/" ? `/${name}` : `${currentPath}/${name}`;
+        window.api.openFileInEditor({
+          name: name,
+          path: filePath
+        });
       }
     });
   });

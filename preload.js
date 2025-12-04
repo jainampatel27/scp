@@ -101,5 +101,25 @@ contextBridge.exposeInMainWorld("api", {
   // Delete items
   deleteItems: (paths) => {
     return ipcRenderer.invoke("delete-items", paths);
+  },
+
+  // Read file content
+  readFile: (filePath) => {
+    return ipcRenderer.invoke("read-file", filePath);
+  },
+
+  // Write file content
+  writeFile: (filePath, content) => {
+    return ipcRenderer.invoke("write-file", filePath, content);
+  },
+
+  // Open file in new editor window
+  openFileInEditor: (fileInfo) => {
+    ipcRenderer.send("open-file-in-editor", fileInfo);
+  },
+
+  // Get editor file info (for editor window)
+  getEditorFileInfo: () => {
+    return ipcRenderer.invoke("get-editor-file-info");
   }
 });
