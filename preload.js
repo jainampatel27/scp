@@ -22,13 +22,14 @@ contextBridge.exposeInMainWorld("api", {
   },
   
   // Navigate to file browser
-  navigateToBrowser: (homePath) => {
-    ipcRenderer.send("navigate-to-browser", homePath);
+  navigateToBrowser: (data) => {
+    ipcRenderer.send("navigate-to-browser", data);
   },
   
-  // List directory
-  listDirectory: (path) => {
-    ipcRenderer.send("list-directory", path);
+  // List directory (with session support)
+  listDirectory: (pathOrData) => {
+    const data = typeof pathOrData === 'object' ? pathOrData : { path: pathOrData };
+    ipcRenderer.send("list-directory", data);
   },
   onListResult: (callback) => {
     ipcRenderer.on("list-result", (event, data) => {
@@ -36,14 +37,24 @@ contextBridge.exposeInMainWorld("api", {
     });
   },
   
-  // Disconnect
-  disconnect: () => {
-    ipcRenderer.send("disconnect");
+  // Disconnect (with optional session ID)
+  disconnect: (sessionId) => {
+    ipcRenderer.send("disconnect", sessionId);
+  },
+  onSessionDisconnected: (callback) => {
+    ipcRenderer.on("session-disconnected", (event, data) => {
+      callback(data);
+    });
   },
   
-  // Get connection info
-  getConnectionInfo: () => {
-    return ipcRenderer.invoke("get-connection-info");
+  // Get connection info (with optional session ID)
+  getConnectionInfo: (sessionId) => {
+    return ipcRenderer.invoke("get-connection-info", sessionId);
+  },
+  
+  // Get all sessions
+  getAllSessions: () => {
+    return ipcRenderer.invoke("get-all-sessions");
   },
   
   // Select files to upload
@@ -51,12 +62,12 @@ contextBridge.exposeInMainWorld("api", {
     return ipcRenderer.invoke("select-files-to-upload");
   },
   
-  // Upload file
+  // Upload file (with session support)
   uploadFile: (config) => {
     ipcRenderer.send("upload-file", config);
   },
   
-  // Download file
+  // Download file (with session support)
   downloadFile: (config) => {
     ipcRenderer.send("download-file", config);
   },
@@ -66,9 +77,9 @@ contextBridge.exposeInMainWorld("api", {
     return ipcRenderer.invoke("select-download-folder");
   },
   
-  // Cancel transfer
-  cancelTransfer: (transferId) => {
-    ipcRenderer.send("cancel-transfer", transferId);
+  // Cancel transfer (with session support)
+  cancelTransfer: (data) => {
+    ipcRenderer.send("cancel-transfer", data);
   },
   
   // Transfer events
@@ -88,29 +99,34 @@ contextBridge.exposeInMainWorld("api", {
     });
   },
   
-  // Create folder
-  createFolder: (folderPath) => {
-    return ipcRenderer.invoke("create-folder", folderPath);
+  // Create folder (with session support)
+  createFolder: (pathOrData) => {
+    const data = typeof pathOrData === 'object' ? pathOrData : { path: pathOrData };
+    return ipcRenderer.invoke("create-folder", data);
   },
   
-  // Create file
-  createFile: (filePath) => {
-    return ipcRenderer.invoke("create-file", filePath);
+  // Create file (with session support)
+  createFile: (pathOrData) => {
+    const data = typeof pathOrData === 'object' ? pathOrData : { path: pathOrData };
+    return ipcRenderer.invoke("create-file", data);
   },
   
-  // Delete items
-  deleteItems: (paths) => {
-    return ipcRenderer.invoke("delete-items", paths);
+  // Delete items (with session support)
+  deleteItems: (pathsOrData) => {
+    const data = Array.isArray(pathsOrData) ? { paths: pathsOrData } : pathsOrData;
+    return ipcRenderer.invoke("delete-items", data);
   },
 
-  // Read file content
-  readFile: (filePath) => {
-    return ipcRenderer.invoke("read-file", filePath);
+  // Read file content (with session support)
+  readFile: (pathOrData) => {
+    const data = typeof pathOrData === 'object' ? pathOrData : { path: pathOrData };
+    return ipcRenderer.invoke("read-file", data);
   },
 
-  // Write file content
-  writeFile: (filePath, content) => {
-    return ipcRenderer.invoke("write-file", filePath, content);
+  // Write file content (with session support)
+  writeFile: (pathOrData, content) => {
+    const data = typeof pathOrData === 'object' ? pathOrData : { path: pathOrData, content };
+    return ipcRenderer.invoke("write-file", data);
   },
 
   // Open file in new editor window

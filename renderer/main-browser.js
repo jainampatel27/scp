@@ -4,18 +4,55 @@ import FileManager from './file-manager.js';
 import TransferManager from './transfer-manager.js';
 import UIManager from './ui-manager.js';
 import EditorManager from './editor-manager.js';
+import { tabManager } from './tab-manager.js';
 
 // Initialize managers
-const fileManager = new FileManager();
-const transferManager = new TransferManager();
-const uiManager = new UIManager(fileManager, transferManager);
-const editorManager = new EditorManager(fileManager, transferManager, uiManager);
+let fileManager = new FileManager();
+let transferManager = new TransferManager();
+let uiManager = new UIManager(fileManager, transferManager);
+let editorManager = new EditorManager(fileManager, transferManager, uiManager);
 
 // Set editor manager in UI manager
 uiManager.editFile = (name) => editorManager.openEditor(name);
 
 // State
 let selectedFiles = new Set();
+
+// Initialize tab manager
+tabManager.init();
+
+// Listen for tab changes
+document.addEventListener("tabChanged", (e) => {
+  const { tabId, state } = e.detail;
+  
+  // Restore state from tab
+  if (state.fileManagerState) {
+    fileManager.restoreState(state.fileManagerState);
+  }
+  
+  // Update UI
+  const info = state.connectionInfo;
+  if (info) {
+    document.getElementById("serverInfo").textContent = `${info.username}@${info.host}:${info.port}`;
+    document.getElementById("connectionLabel").textContent = `Connected to ${info.host}`;
+  }
+  
+  uiManager.updatePathDisplay(fileManager.getCurrentPath());
+  uiManager.updateNavButtons();
+  uiManager.showLoading();
+  fileManager.loadDirectory(fileManager.getCurrentPath());
+});
+
+// Save current tab state before actions
+function saveCurrentTabState() {
+  if (tabManager.getActiveTabId()) {
+    tabManager.saveActiveTabState(
+      fileManager.getState(),
+      { transfers: new Map(transferManager.transfers) },
+      new Set(uiManager.getSelectedFiles())
+    );
+  }
+}
 
 // Navigation handlers
 document.getElementById("backBtn").addEventListener("click", () => {
@@ -68,9 +105,15 @@ document.getElementById("pathInput").addEventListener("keypress", (e) => {
   }
 });
 
-// Disconnect handler
+// Disconnect handler - now closes current tab or disconnects completely
 document.getElementById("disconnectBtn").addEventListener("click", () => {
-  window.api.disconnect();
+  if (tabManager.getTabCount() > 1) {
+    // If there are multiple tabs, just close the current one
+    tabManager.closeTab(tabManager.getActiveTabId());
+  } else {
+    // If this is the last tab, disconnect completely
+    window.api.disconnect();
+  }
 });
 
 // Upload functionality
@@ -78,9 +121,16 @@ document.getElementById("uploadBtn").addEventListener("click", () => {
   window.api.selectFilesToUpload().then(files => {
     if (files && files.length > 0) {
       files.forEach(file => {
-        transferManager.uploadFile(file.path, fileManager.getFullPath(file.name), file.size, file.name);
+        transferManager.uploadFile(
+          file.path, 
+          fileManager.getFullPath(file.name), 
+          file.size, 
+          file.name,
+          fileManager.getSessionId()
+        );
       });
       uiManager.renderTransfers();
+      saveCurrentTabState();
     }
   });
 });
@@ -113,9 +163,16 @@ document.getElementById("downloadBtn").addEventListener("click", () => {
       filesToDownload.forEach(file => {
         const remotePath = fileManager.getFullPath(file.name);
         const localPath = `${folderPath}/${file.name}`;
-        transferManager.downloadFile(remotePath, localPath, file.size, file.name);
+        transferManager.downloadFile(
+          remotePath, 
+          localPath, 
+          file.size, 
+          file.name,
+          fileManager.getSessionId()
+        );
       });
       uiManager.renderTransfers();
+      saveCurrentTabState();
     }
   });
 });
@@ -164,9 +221,16 @@ filePanel.addEventListener("drop", (e) => {
 
     if (filePaths.length > 0) {
       filePaths.forEach(file => {
-        transferManager.uploadFile(file.path, fileManager.getFullPath(file.name), file.size, file.name);
+        transferManager.uploadFile(
+          file.path, 
+          fileManager.getFullPath(file.name), 
+          file.size, 
+          file.name,
+          fileManager.getSessionId()
+        );
       });
       uiManager.renderTransfers();
+      saveCurrentTabState();
     } else {
       // Fallback: use dialog to select files if path not available
       alert("Please use the upload button to select files.");
@@ -306,13 +370,14 @@ async function createNewItem() {
   createItemBtn.textContent = "Creating...";
 
   const fullPath = fileManager.getFullPath(name);
+  const sessionId = fileManager.getSessionId();
 
   try {
     let result;
     if (newItemType === "folder") {
-      result = await window.api.createFolder(fullPath);
+      result = await window.api.createFolder({ path: fullPath, sessionId });
     } else {
-      result = await window.api.createFile(fullPath);
+      result = await window.api.createFile({ path: fullPath, sessionId });
     }
 
     if (result.ok) {
@@ -408,7 +473,10 @@ confirmDeleteBtn.addEventListener("click", async () => {
   confirmDeleteBtn.textContent = "Deleting...";
 
   try {
-    const results = await window.api.deleteItems(itemsToDelete);
+    const results = await window.api.deleteItems({ 
+      paths: itemsToDelete, 
+      sessionId: fileManager.getSessionId() 
+    });
 
     // Check for errors
     const errors = results.filter(r => !r.ok);
@@ -431,9 +499,16 @@ confirmDeleteBtn.addEventListener("click", async () => {
 
 // API event listeners
 window.api.onListResult((data) => {
+  // Only process if it's for the current session
+  const currentSessionId = fileManager.getSessionId();
+  if (data.sessionId && data.sessionId !== currentSessionId) {
+    return; // Ignore results for other sessions
+  }
+  
   if (data.ok) {
     fileManager.setFiles(data.files);
     uiManager.renderFiles();
+    saveCurrentTabState();
   } else {
     uiManager.loadingState.classList.add("hidden");
     uiManager.fileList.innerHTML = `
@@ -457,35 +532,117 @@ window.api.onTransferComplete((data) => {
   transferManager.updateProgress(data.transferId, 100);
   uiManager.renderTransfers();
 
-  // Refresh directory if upload
-  if (transferManager.transfers.get(data.transferId)?.type === "upload") {
-    fileManager.loadDirectory(fileManager.getCurrentPath());
+  // Refresh directory if upload (for the current session only)
+  const transfer = transferManager.transfers.get(data.transferId);
+  if (transfer?.type === "upload") {
+    if (!data.sessionId || data.sessionId === fileManager.getSessionId()) {
+      fileManager.loadDirectory(fileManager.getCurrentPath());
+    }
   }
+  saveCurrentTabState();
 });
 
 window.api.onTransferError((data) => {
   transferManager.handleError(data.transferId, data.error);
   uiManager.renderTransfers();
+  saveCurrentTabState();
 });
 
-// Initialization
-window.api.getConnectionInfo().then(info => {
-  if (info) {
-    document.getElementById("serverInfo").textContent = `${info.username}@${info.host}:${info.port}`;
-    document.getElementById("connectionLabel").textContent = `Connected to ${info.host}`;
+// Initialization - use tab manager
+async function initializeBrowser() {
+  const hasExistingSessions = await tabManager.initFromSessions();
+  
+  // If we have tabs, the tabChanged event will handle loading
+  // If no sessions exist, we should show the new connection modal
+  // which is handled by tabManager.initFromSessions()
+}
 
-    // Load the home directory instead of root
-    const startPath = info.homePath || "/";
-    fileManager.navigateTo(startPath);
-    uiManager.updatePathDisplay(startPath);
-    uiManager.updateNavButtons();
-    uiManager.showLoading();
-    fileManager.loadDirectory(startPath);
-  } else {
-    // No connection info, load root
-    uiManager.showLoading();
-    fileManager.loadDirectory("/");
+// Start initialization
+initializeBrowser();
+
+// ==========================================
+// NEW CONNECTION MODAL (for new tabs)
+// ==========================================
+
+const newConnectionModal = document.getElementById("newConnectionModal");
+const newConnModalClose = document.getElementById("newConnModalClose");
+const newConnHost = document.getElementById("newConnHost");
+const newConnPort = document.getElementById("newConnPort");
+const newConnUsername = document.getElementById("newConnUsername");
+const newConnPassword = document.getElementById("newConnPassword");
+const newConnStatus = document.getElementById("newConnStatus");
+const newConnCancelBtn = document.getElementById("newConnCancelBtn");
+const newConnConnectBtn = document.getElementById("newConnConnectBtn");
+
+function closeNewConnectionModal() {
+  newConnectionModal.classList.remove("show");
+  newConnStatus.textContent = "";
+  newConnStatus.className = "conn-status";
+}
+
+// Close modal handlers
+newConnModalClose?.addEventListener("click", closeNewConnectionModal);
+newConnCancelBtn?.addEventListener("click", closeNewConnectionModal);
+newConnectionModal?.addEventListener("click", (e) => {
+  if (e.target === newConnectionModal) {
+    closeNewConnectionModal();
   }
+});
+
+// Connect button handler
+newConnConnectBtn?.addEventListener("click", async () => {
+  const host = newConnHost.value.trim();
+  const port = parseInt(newConnPort.value) || 22;
+  const username = newConnUsername.value.trim();
+  const password = newConnPassword.value;
+  
+  if (!host || !username) {
+    newConnStatus.textContent = "Please enter host and username";
+    newConnStatus.className = "conn-status error";
+    return;
+  }
+  
+  newConnConnectBtn.disabled = true;
+  newConnConnectBtn.textContent = "Connecting...";
+  newConnStatus.textContent = "Establishing connection...";
+  newConnStatus.className = "conn-status";
+  
+  // Connect to new session
+  window.api.sftpConnectAndList({
+    host,
+    port,
+    username,
+    password
+  });
+});
+
+// Listen for new connection result
+window.api.onSftpListResult((data) => {
+  if (data.ok && data.sessionId) {
+    // Connection successful - create new tab
+    const connectionInfo = {
+      host: newConnHost.value.trim(),
+      port: parseInt(newConnPort.value) || 22,
+      username: newConnUsername.value.trim(),
+      homePath: data.homePath
+    };
+    
+    tabManager.createTab(data.sessionId, connectionInfo);
+    closeNewConnectionModal();
+    
+    // Clear form for next use
+    newConnHost.value = "";
+    newConnPort.value = "22";
+    newConnUsername.value = "";
+    newConnPassword.value = "";
+  } else if (!data.ok && newConnectionModal.classList.contains("show")) {
+    // Connection failed
+    newConnStatus.textContent = data.error || "Connection failed";
+    newConnStatus.className = "conn-status error";
+  }
+  
+  newConnConnectBtn.disabled = false;
+  newConnConnectBtn.textContent = "Connect";
 });
 
 // Keyboard shortcuts
@@ -505,6 +662,12 @@ document.addEventListener("keydown", (e) => {
     document.getElementById("newFolderBtn").click();
   }
 
+  // Cmd/Ctrl + T to create new tab
+  if ((e.metaKey || e.ctrlKey) && e.key === "t") {
+    e.preventDefault();
+    tabManager.showNewConnectionModal();
+  }
+
   // Escape to close modals
   if (e.key === "Escape") {
     if (newItemModal.classList.contains("active")) {
@@ -512,6 +675,9 @@ document.addEventListener("keydown", (e) => {
     }
     if (deleteModal.classList.contains("active")) {
       closeDeleteModal();
+    }
+    if (newConnectionModal.classList.contains("show")) {
+      closeNewConnectionModal();
     }
   }
 });

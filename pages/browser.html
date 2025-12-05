@@ -7,6 +7,18 @@
     <link rel="stylesheet" href="../styles/browser.css" />
   </head>
   <body>
+    <!-- Tab Bar -->
+    <div class="tab-bar">
+      <div class="tab-list" id="tabList">
+        <!-- Tabs will be rendered here -->
+      </div>
+      <button class="new-tab-btn" id="newTabBtn" title="New Connection">
+        <svg viewBox="0 0 24 24">
+          <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+        </svg>
+      </button>
+    </div>
+
     <!-- Top Toolbar -->
     <div class="toolbar">
       <div class="toolbar-left">
@@ -199,6 +211,45 @@
         <div class="modal-footer">
           <button class="btn-secondary" id="cancelDeleteBtn">Cancel</button>
           <button class="btn-danger" id="confirmDeleteBtn">Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- New Connection Modal (for new tabs) -->
+    <div class="modal-overlay" id="newConnectionModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>New Connection</h3>
+          <button class="modal-close" id="newConnModalClose">
+            <svg viewBox="0 0 24 24">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="newConnHost">Host</label>
+            <input type="text" id="newConnHost" placeholder="example.com or IP address" />
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="newConnPort">Port</label>
+              <input type="number" id="newConnPort" value="22" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="newConnUsername">Username</label>
+            <input type="text" id="newConnUsername" placeholder="root" />
+          </div>
+          <div class="form-group">
+            <label for="newConnPassword">Password</label>
+            <input type="password" id="newConnPassword" placeholder="Enter password" />
+          </div>
+          <div class="conn-status" id="newConnStatus"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" id="newConnCancelBtn">Cancel</button>
+          <button class="btn-primary" id="newConnConnectBtn">Connect</button>
         </div>
       </div>
     </div>

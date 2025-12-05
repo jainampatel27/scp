@@ -1,3 +1,6 @@
+// Import tab manager
+import { tabManager } from './tab-manager.js';
+
 // DOM Elements
 const fileList = document.getElementById("fileList");
 const loadingState = document.getElementById("loadingState");
@@ -30,7 +33,7 @@ const uploadBtn = document.getElementById("uploadBtn");
 const downloadBtn = document.getElementById("downloadBtn");
 const deleteBtn = document.getElementById("deleteBtn");
 
-// State
+// State (now managed per-tab via tabManager, these are shortcuts)
 let currentPath = "/";
 let files = [];
 let selectedFiles = new Set();
@@ -38,6 +41,7 @@ let history = ["/"];
 let historyIndex = 0;
 let transfers = new Map();
 let transferIdCounter = 0;
+let currentSessionId = null;
 
 // Format file size
 function formatSize(bytes) {
@@ -202,6 +206,7 @@ function navigateTo(path) {
   
   updateNavButtons();
   loadDirectory(path);
+  syncStateToTab();
 }
 
 // Load directory
@@ -211,7 +216,47 @@ function loadDirectory(path) {
   fileList.innerHTML = "";
   fileList.appendChild(loadingState);
   
-  window.api.listDirectory(path);
+  window.api.listDirectory({ path, sessionId: currentSessionId });
+}
+
+// Sync state to tab manager
+function syncStateToTab() {
+  tabManager.updateActiveTabState({
+    currentPath,
+    history: [...history],
+    historyIndex,
+    files: [...files],
+    selectedFiles: new Set(selectedFiles),
+    transfers: new Map(transfers)
+  });
+}
+
+// Restore state from tab
+function restoreStateFromTab(state) {
+  if (!state) return;
+  
+  currentSessionId = state.sessionId;
+  currentPath = state.currentPath || "/";
+  history = state.history || ["/"];
+  historyIndex = state.historyIndex || 0;
+  files = state.files || [];
+  selectedFiles = new Set(state.selectedFiles || []);
+  transfers = new Map(state.transfers || []);
+  
+  // Update UI
+  pathInput.value = currentPath;
+  currentPathEl.textContent = currentPath;
+  updateNavButtons();
+  
+  // Update connection info display
+  if (state.connectionInfo) {
+    serverInfoEl.textContent = `${state.connectionInfo.username}@${state.connectionInfo.host}:${state.connectionInfo.port}`;
+    connectionLabel.textContent = `Connected to ${state.connectionInfo.host}`;
+  }
+  
+  // Reload the directory for this session
+  loadDirectory(currentPath);
+  renderTransfers();
 }
 
 // Update navigation buttons
@@ -268,9 +313,20 @@ pathInput.addEventListener("keypress", (e) => {
   }
 });
 
-// Disconnect handler
+// Disconnect handler - now closes current tab
 disconnectBtn.addEventListener("click", () => {
-  window.api.disconnect();
+  if (tabManager.getTabCount() > 1) {
+    // If there are multiple tabs, just close the current one
+    tabManager.closeTab(tabManager.activeTabId);
+  } else {
+    // If this is the last tab, disconnect completely
+    window.api.disconnect();
+  }
+});
+
+// Listen for tab changes
+document.addEventListener("tabChanged", (e) => {
+  restoreStateFromTab(e.detail.state);
 });
 
 // ==========================================
@@ -296,13 +352,15 @@ uploadBtn.addEventListener("click", () => {
         });
         
         renderTransfers();
+        syncStateToTab();
         
         // Start upload
         window.api.uploadFile({
           transferId,
           localPath: file.path,
           remotePath,
-          size: file.size
+          size: file.size,
+          sessionId: currentSessionId
         });
       });
     }
@@ -332,13 +390,15 @@ function uploadFilesFromDrop(filePaths) {
     });
     
     renderTransfers();
+    syncStateToTab();
     
     // Start upload
     window.api.uploadFile({
       transferId,
       localPath: fileInfo.path,
       remotePath,
-      size: fileInfo.size
+      size: fileInfo.size,
+      sessionId: currentSessionId
     });
   });
 }
@@ -387,13 +447,15 @@ downloadBtn.addEventListener("click", () => {
         });
         
         renderTransfers();
+        syncStateToTab();
         
         // Start download
         window.api.downloadFile({
           transferId,
           remotePath,
           localPath,
-          size: file.size
+          size: file.size,
+          sessionId: currentSessionId
         });
       });
     }
@@ -517,9 +579,10 @@ function renderTransfers() {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       const id = parseInt(btn.dataset.id);
-      window.api.cancelTransfer(id);
+      window.api.cancelTransfer({ transferId: id, sessionId: currentSessionId });
       transfers.delete(id);
       renderTransfers();
+      syncStateToTab();
     });
   });
 }
@@ -590,26 +653,16 @@ window.api.onTransferError((data) => {
 // INITIALIZATION
 // ==========================================
 
-// Initialize
-window.api.getConnectionInfo().then(info => {
-  if (info) {
-    serverInfoEl.textContent = `${info.username}@${info.host}:${info.port}`;
-    connectionLabel.textContent = `Connected to ${info.host}`;
-    
-    // Load the home directory instead of root
-    const startPath = info.homePath || "/";
-    currentPath = startPath;
-    pathInput.value = startPath;
-    currentPathEl.textContent = startPath;
-    history = [startPath];
-    historyIndex = 0;
-    
-    loadDirectory(startPath);
-  } else {
-    // No connection info, load root
-    loadDirectory("/");
-  }
-});
+// Initialize tabs from existing sessions
+async function initializeBrowser() {
+  await tabManager.initFromSessions();
+  
+  // If tabs were created, the tabChanged event will handle loading
+  // If no sessions, the modal will be shown
+}
+
+// Start initialization
+initializeBrowser();
 
 // ==========================================
 // NEW ITEM MODAL (FILE / FOLDER)
@@ -741,9 +794,9 @@ async function createNewItem() {
   try {
     let result;
     if (newItemType === "folder") {
-      result = await window.api.createFolder(fullPath);
+      result = await window.api.createFolder({ path: fullPath, sessionId: currentSessionId });
     } else {
-      result = await window.api.createFile(fullPath);
+      result = await window.api.createFile({ path: fullPath, sessionId: currentSessionId });
     }
     
     if (result.ok) {
@@ -840,7 +893,7 @@ confirmDeleteBtn.addEventListener("click", async () => {
   confirmDeleteBtn.textContent = "Deleting...";
   
   try {
-    const results = await window.api.deleteItems(itemsToDelete);
+    const results = await window.api.deleteItems({ paths: itemsToDelete, sessionId: currentSessionId });
     
     // Check for errors
     const errors = results.filter(r => !r.ok);

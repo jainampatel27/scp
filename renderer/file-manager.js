@@ -6,6 +6,28 @@ class FileManager {
     this.files = [];
     this.history = ["/"];
     this.historyIndex = 0;
+    this.sessionId = null;
+    this.connectionInfo = null;
+  }
+
+  // Set session ID
+  setSessionId(sessionId) {
+    this.sessionId = sessionId;
+  }
+
+  // Get session ID
+  getSessionId() {
+    return this.sessionId;
+  }
+
+  // Set connection info
+  setConnectionInfo(info) {
+    this.connectionInfo = info;
+  }
+
+  // Get connection info
+  getConnectionInfo() {
+    return this.connectionInfo;
   }
 
   // Navigate to a path
@@ -60,7 +82,7 @@ class FileManager {
   // Load directory contents
   loadDirectory(path) {
     this.files = []; // Clear current files
-    window.api.listDirectory(path);
+    window.api.listDirectory({ path, sessionId: this.sessionId });
   }
 
   // Set files data
@@ -99,6 +121,29 @@ class FileManager {
   // Get full path for file
   getFullPath(name) {
     return this.currentPath === "/" ? `/${name}` : `${this.currentPath}/${name}`;
+  }
+
+  // Get state for tab saving
+  getState() {
+    return {
+      currentPath: this.currentPath,
+      files: [...this.files],
+      history: [...this.history],
+      historyIndex: this.historyIndex,
+      sessionId: this.sessionId,
+      connectionInfo: this.connectionInfo
+    };
+  }
+
+  // Restore state from tab
+  restoreState(state) {
+    if (!state) return;
+    this.currentPath = state.currentPath || "/";
+    this.files = state.files || [];
+    this.history = state.history || ["/"];
+    this.historyIndex = state.historyIndex || 0;
+    this.sessionId = state.sessionId;
+    this.connectionInfo = state.connectionInfo;
   }
 }
 

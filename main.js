@@ -5,10 +5,11 @@ const fs = require("fs");
 const Client = require("ssh2-sftp-client");
 
 let mainWindow;
-let sftp = new Client();
-let connectionInfo = null;
-let activeTransfers = new Map();
 let editorWindows = new Map(); // Track editor windows
+
+// Multi-session management
+let sessions = new Map(); // sessionId -> { sftp, connectionInfo, activeTransfers }
+let sessionIdCounter = 0;
 
 function createWindow() {
   // Determine icon path based on platform
@@ -42,7 +43,7 @@ function createWindow() {
 
 // Check TCP connectivity to server
 ipcMain.on("check-connectivity", async (event, config) => {
-  const { host, port } = config;
+  const { host, port, sessionId } = config;
   const startTime = Date.now();
   
   const socket = new net.Socket();
@@ -53,12 +54,12 @@ ipcMain.on("check-connectivity", async (event, config) => {
   socket.on("connect", () => {
     const latency = Date.now() - startTime;
     socket.destroy();
-    event.sender.send("connectivity-result", { ok: true, latency });
+    event.sender.send("connectivity-result", { ok: true, latency, sessionId });
   });
   
   socket.on("timeout", () => {
     socket.destroy();
-    event.sender.send("connectivity-result", { ok: false, error: "Connection timed out" });
+    event.sender.send("connectivity-result", { ok: false, error: "Connection timed out", sessionId });
   });
   
   socket.on("error", (err) => {
@@ -73,28 +74,23 @@ ipcMain.on("check-connectivity", async (event, config) => {
       errorMessage = "Network unreachable. Check your internet connection.";
     }
     
-    event.sender.send("connectivity-result", { ok: false, error: errorMessage });
+    event.sender.send("connectivity-result", { ok: false, error: errorMessage, sessionId });
   });
   
   try {
     socket.connect(port, host);
   } catch (err) {
-    event.sender.send("connectivity-result", { ok: false, error: err.message });
+    event.sender.send("connectivity-result", { ok: false, error: err.message, sessionId });
   }
 });
 
-// Handle SFTP connect + list root
+// Handle SFTP connect + list root (creates a new session)
 ipcMain.on("sftp-connect-and-list", async (event, config) => {
+  const sessionId = config.sessionId || ++sessionIdCounter;
+  
   try {
-    // Disconnect previous connection if any
-    try {
-      await sftp.end();
-    } catch (e) {
-      // Ignore errors on disconnect
-    }
-    
-    // Create new client
-    sftp = new Client();
+    // Create new SFTP client for this session
+    const sftp = new Client();
     
     await sftp.connect({
       host: config.host,
@@ -105,7 +101,7 @@ ipcMain.on("sftp-connect-and-list", async (event, config) => {
     });
     
     // Store connection info (including password for sudo operations)
-    connectionInfo = {
+    const connectionInfo = {
       host: config.host,
       port: config.port,
       username: config.username,
@@ -129,7 +125,15 @@ ipcMain.on("sftp-connect-and-list", async (event, config) => {
     }
     
     const files = await sftp.list(homePath);
-    event.sender.send("sftp-list-result", { ok: true, files, homePath });
+    
+    // Store the session
+    sessions.set(sessionId, {
+      sftp,
+      connectionInfo: { ...connectionInfo, homePath },
+      activeTransfers: new Map()
+    });
+    
+    event.sender.send("sftp-list-result", { ok: true, files, homePath, sessionId });
   } catch (err) {
     let errorMessage = err.message;
     
@@ -139,41 +143,87 @@ ipcMain.on("sftp-connect-and-list", async (event, config) => {
       errorMessage = "Connection timed out";
     }
     
-    event.sender.send("sftp-list-result", { ok: false, error: errorMessage });
+    event.sender.send("sftp-list-result", { ok: false, error: errorMessage, sessionId });
   }
 });
 
 // Navigate to browser page
-ipcMain.on("navigate-to-browser", (event, homePath) => {
-  // Store the home path for the browser to use
-  connectionInfo.homePath = homePath || "/";
+ipcMain.on("navigate-to-browser", (event, data) => {
+  // data can be { homePath, sessionId } or just homePath for backward compatibility
+  const homePath = typeof data === 'object' ? data.homePath : data;
+  const sessionId = typeof data === 'object' ? data.sessionId : null;
+  
+  if (sessionId && sessions.has(sessionId)) {
+    const session = sessions.get(sessionId);
+    session.connectionInfo.homePath = homePath || "/";
+  }
+  
   mainWindow.loadFile("pages/browser.html");
 });
 
-// List directory
-ipcMain.on("list-directory", async (event, dirPath) => {
+// List directory (for specific session)
+ipcMain.on("list-directory", async (event, data) => {
+  const { path: dirPath, sessionId } = typeof data === 'object' ? data : { path: data, sessionId: null };
+  const session = sessionId ? sessions.get(sessionId) : sessions.values().next().value;
+  
+  if (!session) {
+    event.sender.send("list-result", { ok: false, error: "No active session", sessionId });
+    return;
+  }
+  
   try {
-    const files = await sftp.list(dirPath || "/");
-    event.sender.send("list-result", { ok: true, files });
+    const files = await session.sftp.list(dirPath || "/");
+    event.sender.send("list-result", { ok: true, files, sessionId });
   } catch (err) {
-    event.sender.send("list-result", { ok: false, error: err.message });
+    event.sender.send("list-result", { ok: false, error: err.message, sessionId });
   }
 });
 
-// Disconnect
-ipcMain.on("disconnect", async () => {
-  try {
-    await sftp.end();
-  } catch (e) {
-    // Ignore
+// Disconnect specific session
+ipcMain.on("disconnect", async (event, sessionId) => {
+  if (sessionId && sessions.has(sessionId)) {
+    const session = sessions.get(sessionId);
+    try {
+      await session.sftp.end();
+    } catch (e) {
+      // Ignore
+    }
+    sessions.delete(sessionId);
+    event.sender.send("session-disconnected", { sessionId });
+  } else {
+    // Disconnect all sessions (backward compatibility)
+    for (const [id, session] of sessions) {
+      try {
+        await session.sftp.end();
+      } catch (e) {
+        // Ignore
+      }
+    }
+    sessions.clear();
+    mainWindow.loadFile("pages/connect.html");
   }
-  connectionInfo = null;
-  mainWindow.loadFile("pages/connect.html");
 });
 
-// Get connection info
-ipcMain.handle("get-connection-info", () => {
-  return connectionInfo;
+// Get connection info for specific session
+ipcMain.handle("get-connection-info", (event, sessionId) => {
+  if (sessionId && sessions.has(sessionId)) {
+    return sessions.get(sessionId).connectionInfo;
+  }
+  // Return first session info for backward compatibility
+  const firstSession = sessions.values().next().value;
+  return firstSession ? firstSession.connectionInfo : null;
+});
+
+// Get all sessions info
+ipcMain.handle("get-all-sessions", () => {
+  const sessionsInfo = [];
+  for (const [id, session] of sessions) {
+    sessionsInfo.push({
+      sessionId: id,
+      ...session.connectionInfo
+    });
+  }
+  return sessionsInfo;
 });
 
 // Select download folder
@@ -214,111 +264,149 @@ ipcMain.handle("select-files-to-upload", async () => {
   return files;
 });
 
-// Upload file
+// Upload file (with session support)
 ipcMain.on("upload-file", async (event, config) => {
-  const { transferId, localPath, remotePath, size } = config;
+  const { transferId, localPath, remotePath, size, sessionId } = config;
+  const session = sessionId ? sessions.get(sessionId) : sessions.values().next().value;
+  
+  if (!session) {
+    event.sender.send("transfer-error", { transferId, error: "No active session", sessionId });
+    return;
+  }
   
   try {
     // Track the transfer
-    activeTransfers.set(transferId, { cancelled: false });
+    session.activeTransfers.set(transferId, { cancelled: false });
     
     // Use fastPut for better performance with progress
-    await sftp.fastPut(localPath, remotePath, {
+    await session.sftp.fastPut(localPath, remotePath, {
       step: (transferred, chunk, total) => {
         const progress = Math.round((transferred / total) * 100);
         
-        if (!activeTransfers.get(transferId)?.cancelled) {
-          event.sender.send("transfer-progress", { transferId, progress });
+        if (!session.activeTransfers.get(transferId)?.cancelled) {
+          event.sender.send("transfer-progress", { transferId, progress, sessionId });
         }
       }
     });
     
-    if (!activeTransfers.get(transferId)?.cancelled) {
-      event.sender.send("transfer-complete", { transferId });
+    if (!session.activeTransfers.get(transferId)?.cancelled) {
+      event.sender.send("transfer-complete", { transferId, sessionId });
     }
     
-    activeTransfers.delete(transferId);
+    session.activeTransfers.delete(transferId);
   } catch (err) {
-    if (!activeTransfers.get(transferId)?.cancelled) {
-      event.sender.send("transfer-error", { transferId, error: err.message });
+    if (!session.activeTransfers.get(transferId)?.cancelled) {
+      event.sender.send("transfer-error", { transferId, error: err.message, sessionId });
     }
-    activeTransfers.delete(transferId);
+    session.activeTransfers.delete(transferId);
   }
 });
 
-// Download file
+// Download file (with session support)
 ipcMain.on("download-file", async (event, config) => {
-  const { transferId, remotePath, localPath, size } = config;
+  const { transferId, remotePath, localPath, size, sessionId } = config;
+  const session = sessionId ? sessions.get(sessionId) : sessions.values().next().value;
+  
+  if (!session) {
+    event.sender.send("transfer-error", { transferId, error: "No active session", sessionId });
+    return;
+  }
   
   try {
     // Track the transfer
-    activeTransfers.set(transferId, { cancelled: false });
+    session.activeTransfers.set(transferId, { cancelled: false });
     
     // Use fastGet for better performance with progress
-    await sftp.fastGet(remotePath, localPath, {
+    await session.sftp.fastGet(remotePath, localPath, {
       step: (transferred, chunk, total) => {
         const progress = Math.round((transferred / total) * 100);
         
-        if (!activeTransfers.get(transferId)?.cancelled) {
-          event.sender.send("transfer-progress", { transferId, progress });
+        if (!session.activeTransfers.get(transferId)?.cancelled) {
+          event.sender.send("transfer-progress", { transferId, progress, sessionId });
         }
       }
     });
     
-    if (!activeTransfers.get(transferId)?.cancelled) {
-      event.sender.send("transfer-complete", { transferId });
+    if (!session.activeTransfers.get(transferId)?.cancelled) {
+      event.sender.send("transfer-complete", { transferId, sessionId });
     }
     
-    activeTransfers.delete(transferId);
+    session.activeTransfers.delete(transferId);
   } catch (err) {
-    if (!activeTransfers.get(transferId)?.cancelled) {
-      event.sender.send("transfer-error", { transferId, error: err.message });
+    if (!session.activeTransfers.get(transferId)?.cancelled) {
+      event.sender.send("transfer-error", { transferId, error: err.message, sessionId });
     }
-    activeTransfers.delete(transferId);
+    session.activeTransfers.delete(transferId);
   }
 });
 
-// Cancel transfer
-ipcMain.on("cancel-transfer", (event, transferId) => {
-  const transfer = activeTransfers.get(transferId);
-  if (transfer) {
-    transfer.cancelled = true;
+// Cancel transfer (with session support)
+ipcMain.on("cancel-transfer", (event, data) => {
+  const { transferId, sessionId } = typeof data === 'object' ? data : { transferId: data, sessionId: null };
+  const session = sessionId ? sessions.get(sessionId) : sessions.values().next().value;
+  
+  if (session) {
+    const transfer = session.activeTransfers.get(transferId);
+    if (transfer) {
+      transfer.cancelled = true;
+    }
   }
 });
 
-// Create folder
-ipcMain.handle("create-folder", async (event, folderPath) => {
+// Create folder (with session support)
+ipcMain.handle("create-folder", async (event, data) => {
+  const { path: folderPath, sessionId } = typeof data === 'object' ? data : { path: data, sessionId: null };
+  const session = sessionId ? sessions.get(sessionId) : sessions.values().next().value;
+  
+  if (!session) {
+    return { ok: false, error: "No active session" };
+  }
+  
   try {
-    await sftp.mkdir(folderPath, true); // recursive = true
+    await session.sftp.mkdir(folderPath, true); // recursive = true
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
   }
 });
 
-// Create file (empty file)
-ipcMain.handle("create-file", async (event, filePath) => {
+// Create file (empty file, with session support)
+ipcMain.handle("create-file", async (event, data) => {
+  const { path: filePath, sessionId } = typeof data === 'object' ? data : { path: data, sessionId: null };
+  const session = sessionId ? sessions.get(sessionId) : sessions.values().next().value;
+  
+  if (!session) {
+    return { ok: false, error: "No active session" };
+  }
+  
   try {
     // Create an empty file by putting an empty buffer
-    await sftp.put(Buffer.from(""), filePath);
+    await session.sftp.put(Buffer.from(""), filePath);
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
   }
 });
 
-// Delete items
-ipcMain.handle("delete-items", async (event, paths) => {
+// Delete items (with session support)
+ipcMain.handle("delete-items", async (event, data) => {
+  const { paths, sessionId } = data.paths ? data : { paths: data, sessionId: null };
+  const session = sessionId ? sessions.get(sessionId) : sessions.values().next().value;
+  
+  if (!session) {
+    return [{ ok: false, error: "No active session" }];
+  }
+  
   const results = [];
   
   for (const item of paths) {
     try {
       if (item.type === "d") {
         // It's a directory - use rmdir with recursive
-        await sftp.rmdir(item.path, true);
+        await session.sftp.rmdir(item.path, true);
       } else {
         // It's a file
-        await sftp.delete(item.path);
+        await session.sftp.delete(item.path);
       }
       results.push({ path: item.path, ok: true });
     } catch (err) {
@@ -329,26 +417,34 @@ ipcMain.handle("delete-items", async (event, paths) => {
   return results;
 });
 
-// Read file content
-ipcMain.handle("read-file", async (event, filePath) => {
-  if (!sftp || !connectionInfo) {
-    throw new Error("Not connected to server");
+// Read file content (with session support)
+ipcMain.handle("read-file", async (event, data) => {
+  const { path: filePath, sessionId } = typeof data === 'object' ? data : { path: data, sessionId: null };
+  const session = sessionId ? sessions.get(sessionId) : sessions.values().next().value;
+  
+  if (!session) {
+    throw new Error("No active session");
   }
+  
   try {
-    const buffer = await sftp.get(filePath);
+    const buffer = await session.sftp.get(filePath);
     return buffer.toString('utf8');
   } catch (err) {
     throw new Error(err.message);
   }
 });
 
-// Write file content
-ipcMain.handle("write-file", async (event, filePath, content) => {
-  if (!sftp || !connectionInfo) {
-    throw new Error("Not connected to server");
+// Write file content (with session support)
+ipcMain.handle("write-file", async (event, data) => {
+  const { path: filePath, content, sessionId } = typeof data === 'object' && data.path ? data : { path: data, content: arguments[2], sessionId: null };
+  const session = sessionId ? sessions.get(sessionId) : sessions.values().next().value;
+  
+  if (!session) {
+    throw new Error("No active session");
   }
+  
   try {
-    await sftp.put(Buffer.from(content, 'utf8'), filePath);
+    await session.sftp.put(Buffer.from(data.content || content, 'utf8'), filePath);
     return { ok: true };
   } catch (err) {
     throw new Error(err.message);

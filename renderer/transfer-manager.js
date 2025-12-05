@@ -7,7 +7,7 @@ class TransferManager {
   }
 
   // Start file upload
-  uploadFile(localPath, remotePath, size, name) {
+  uploadFile(localPath, remotePath, size, name, sessionId = null) {
     const transferId = ++this.transferIdCounter;
 
     // Add to transfers
@@ -17,7 +17,8 @@ class TransferManager {
       type: "upload",
       size: size,
       progress: 0,
-      status: "uploading"
+      status: "uploading",
+      sessionId
     });
 
     // Start upload
@@ -25,14 +26,15 @@ class TransferManager {
       transferId,
       localPath,
       remotePath,
-      size
+      size,
+      sessionId
     });
 
     return transferId;
   }
 
   // Start file download
-  downloadFile(remotePath, localPath, size, name) {
+  downloadFile(remotePath, localPath, size, name, sessionId = null) {
     const transferId = ++this.transferIdCounter;
 
     // Add to transfers
@@ -42,7 +44,8 @@ class TransferManager {
       type: "download",
       size: size,
       progress: 0,
-      status: "downloading"
+      status: "downloading",
+      sessionId
     });
 
     // Start download
@@ -50,7 +53,8 @@ class TransferManager {
       transferId,
       remotePath,
       localPath,
-      size
+      size,
+      sessionId
     });
 
     return transferId;
@@ -60,7 +64,7 @@ class TransferManager {
   cancelTransfer(transferId) {
     const transfer = this.transfers.get(transferId);
     if (transfer) {
-      window.api.cancelTransfer(transferId);
+      window.api.cancelTransfer({ transferId, sessionId: transfer.sessionId });
       this.transfers.delete(transferId);
     }
   }
